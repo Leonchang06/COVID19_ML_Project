@@ -15,7 +15,7 @@ st.set_page_config(
 @st.cache_resource
 def load_model_bundle():
     bundle = joblib.load(
-        "logistic_bundle.pkl"
+        "best_model_bundle.pkl"
     )
 
     return (
@@ -30,6 +30,10 @@ model, preprocessor = load_model_bundle()
 # Page title
 st.title(
     "COVID-19 Test Result Prediction"
+)
+
+st.caption(
+    "Prediction model: Random Forest"
 )
 
 st.write(
