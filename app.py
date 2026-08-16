@@ -41,7 +41,6 @@ try:
     preprocessor = bundle["preprocessor"]
     models = bundle["models"]
     metrics = bundle["metrics"]
-    best_model_name = bundle["best_model"]
 
 except Exception as error:
     st.error(
@@ -107,73 +106,8 @@ def generate_prediction(
 # Page heading
 # =======================================
 st.title(
-    "COVID-19 Test Result Prediction System"
+    "COVID-19 Prediction System"
 )
-
-st.write(
-    "This supervised machine learning system "
-    "compares three classification algorithms "
-    "developed by the group members."
-)
-
-st.warning(
-    "This is an educational machine learning "
-    "prototype. It is not a medical diagnosis "
-    "and must not replace professional medical "
-    "advice or laboratory testing."
-)
-
-
-# =======================================
-# Model information
-# =======================================
-st.info(
-    f"Best-performing model: "
-    f"{best_model_name}"
-)
-
-with st.expander(
-    "View model performance comparison"
-):
-
-    metrics_table = []
-
-    for model_name, model_metrics in metrics.items():
-
-        metrics_table.append({
-            "Model": model_name,
-            "Accuracy": (
-                f"{model_metrics['Accuracy'] * 100:.2f}%"
-            ),
-            "Precision": (
-                f"{model_metrics['Precision'] * 100:.2f}%"
-            ),
-            "Recall": (
-                f"{model_metrics['Recall'] * 100:.2f}%"
-            ),
-            "F1-score": (
-                f"{model_metrics['F1-score'] * 100:.2f}%"
-            ),
-            "Training Time": (
-                f"{model_metrics['Training Time']:.2f}s"
-            )
-        })
-
-    metrics_df = pd.DataFrame(
-        metrics_table
-    )
-
-    st.dataframe(
-        metrics_df,
-        use_container_width=True,
-        hide_index=True
-    )
-
-    st.caption(
-        "Random Forest is recommended because "
-        "it achieved the highest accuracy, "
-        "precision, recall, and F1-score."
-    )
 
 
 # =======================================
@@ -190,12 +124,7 @@ with st.form("prediction_form"):
 
     selected_model = st.selectbox(
         "Classification method",
-        model_options,
-        format_func=lambda model_name: (
-            f"{model_name} (Recommended)"
-            if model_name == best_model_name
-            else model_name
-        )
+        model_options
     )
 
     st.subheader("Symptoms")
@@ -320,12 +249,6 @@ if predict_button:
                     encoded_input
                 )
 
-                result["Recommended"] = (
-                    "Yes"
-                    if model_name == best_model_name
-                    else "No"
-                )
-
                 prediction_results.append(
                     result
                 )
@@ -338,13 +261,6 @@ if predict_button:
                 results_df,
                 use_container_width=True,
                 hide_index=True
-            )
-
-            st.info(
-                f"The recommended result should "
-                f"be interpreted using "
-                f"{best_model_name}, which achieved "
-                f"the best evaluation performance."
             )
 
         # Use one selected model
@@ -419,11 +335,41 @@ if predict_button:
 
 
 # =======================================
-# Footer
+# Model performance
 # =======================================
-st.divider()
+with st.expander(
+    "View Model Performance"
+):
 
-st.caption(
-    "Developed for a supervised machine "
-    "learning assignment."
-)
+    metrics_table = []
+
+    for model_name, model_metrics in metrics.items():
+
+        metrics_table.append({
+            "Model": model_name,
+            "Accuracy": (
+                f"{model_metrics['Accuracy'] * 100:.2f}%"
+            ),
+            "Precision": (
+                f"{model_metrics['Precision'] * 100:.2f}%"
+            ),
+            "Recall": (
+                f"{model_metrics['Recall'] * 100:.2f}%"
+            ),
+            "F1-score": (
+                f"{model_metrics['F1-score'] * 100:.2f}%"
+            ),
+            "Training Time": (
+                f"{model_metrics['Training Time']:.2f}s"
+            )
+        })
+
+    metrics_df = pd.DataFrame(
+        metrics_table
+    )
+
+    st.dataframe(
+        metrics_df,
+        use_container_width=True,
+        hide_index=True
+    )
