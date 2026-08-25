@@ -14,7 +14,13 @@ st.set_page_config(
     layout="centered",
 )
 
-MODEL_PATH = Path(__file__).parent / "all_models_bundle.pkl"
+MODEL_DIR = Path(__file__).parent
+
+MODEL_FILE_PATHS = {
+    "Logistic Regression": MODEL_DIR / "model_logistic_regression.pkl",
+    "Random Forest": MODEL_DIR / "model_random_forest.pkl",
+    "Linear SVM": MODEL_DIR / "model_linear_svm.pkl",
+}
 
 EXPECTED_MODELS = {
     "Logistic Regression",
@@ -36,30 +42,37 @@ REQUIRED_METRICS = {
 # =======================================
 @st.cache_resource
 def load_model_bundle():
-    if not MODEL_PATH.exists():
+    missing_files = [
+        model_path.name
+        for model_path in MODEL_FILE_PATHS.values()
+        if not model_path.exists()
+    ]
+
+    if missing_files:
         raise FileNotFoundError(
-            "all_models_bundle.pkl was not found."
+            "Missing model files: "
+            + ", ".join(missing_files)
         )
 
-    loaded_bundle = joblib.load(MODEL_PATH)
-    required_keys = {
-        "preprocessor",
-        "models",
-        "metrics",
-    }
-    missing_keys = required_keys - set(loaded_bundle)
+    loaded_models = {}
+    loaded_metrics = {}
 
-    if missing_keys:
-        raise KeyError(
-            "Missing bundle components: "
-            + ", ".join(sorted(missing_keys))
+    for model_name, model_path in MODEL_FILE_PATHS.items():
+        loaded_entry = joblib.load(model_path)
+
+        required_entry_keys = {"pipeline", "metrics"}
+        missing_entry_keys = (
+            required_entry_keys - set(loaded_entry)
         )
 
-    loaded_models = loaded_bundle["models"]
-    loaded_metrics = loaded_bundle["metrics"]
+        if missing_entry_keys:
+            raise KeyError(
+                f"{model_name} file is missing: "
+                + ", ".join(sorted(missing_entry_keys))
+            )
 
-    if not hasattr(loaded_bundle["preprocessor"], "transform"):
-        raise TypeError("The saved preprocessor is invalid.")
+        loaded_models[model_name] = loaded_entry["pipeline"]
+        loaded_metrics[model_name] = loaded_entry["metrics"]
 
     missing_models = EXPECTED_MODELS - set(loaded_models)
 
@@ -75,11 +88,6 @@ def load_model_bundle():
                 f"{model_name} does not support prediction."
             )
 
-        if model_name not in loaded_metrics:
-            raise KeyError(
-                f"Metrics are missing for {model_name}."
-            )
-
         missing_metrics = (
             REQUIRED_METRICS
             - set(loaded_metrics[model_name])
@@ -91,12 +99,14 @@ def load_model_bundle():
                 + ", ".join(sorted(missing_metrics))
             )
 
-    return loaded_bundle
+    return {
+        "models": loaded_models,
+        "metrics": loaded_metrics,
+    }
 
 
 try:
     bundle = load_model_bundle()
-    preprocessor = bundle["preprocessor"]
     models = bundle["models"]
     metrics = bundle["metrics"]
 
@@ -115,9 +125,11 @@ except Exception as error:
 def generate_prediction(
     model_name,
     model,
-    encoded_input,
+    model_input,
 ):
-    raw_prediction = model.predict(encoded_input)
+    # `model` is a full scikit-learn Pipeline (preprocessor + estimator),
+    # so it takes the raw, unencoded form input directly.
+    raw_prediction = model.predict(model_input)
 
     if len(raw_prediction) != 1:
         raise ValueError(
@@ -154,7 +166,7 @@ def generate_prediction(
 
         positive_index = classes.index(1)
         probability = float(
-            model.predict_proba(encoded_input)[0][
+            model.predict_proba(model_input)[0][
                 positive_index
             ]
         )
@@ -170,7 +182,7 @@ def generate_prediction(
 
     elif hasattr(model, "decision_function"):
         decision_score = float(
-            model.decision_function(encoded_input)[0]
+            model.decision_function(model_input)[0]
         )
         result["Decision Score"] = f"{decision_score:.4f}"
 
@@ -221,32 +233,16 @@ def build_input_data(
     return model_input, input_summary
 
 
-def validate_encoded_input(encoded_input):
-    if encoded_input.shape[0] != 1:
+def validate_model_input(model_input):
+    if model_input.shape[0] != 1:
         raise ValueError(
             "Exactly one input record is required."
         )
 
-    if encoded_input.shape[1] == 0:
+    if model_input.shape[1] == 0:
         raise ValueError(
-            "No encoded features were generated."
+            "No input features were provided."
         )
-
-    feature_count = encoded_input.shape[1]
-
-    for model_name, model in models.items():
-        expected_count = getattr(
-            model,
-            "n_features_in_",
-            feature_count,
-        )
-
-        if feature_count != expected_count:
-            raise ValueError(
-                f"Feature mismatch for {model_name}: "
-                f"expected {expected_count}, "
-                f"received {feature_count}."
-            )
 
 
 def combine_input_and_results(
@@ -388,10 +384,7 @@ with prediction_tab:
         )
 
         try:
-            encoded_input = preprocessor.transform(
-                model_input
-            )
-            validate_encoded_input(encoded_input)
+            validate_model_input(model_input)
 
             st.divider()
             st.subheader("Prediction Result")
@@ -404,7 +397,7 @@ with prediction_tab:
                         generate_prediction(
                             model_name,
                             model,
-                            encoded_input,
+                            model_input,
                         )
                     )
 
@@ -448,7 +441,7 @@ with prediction_tab:
                 result = generate_prediction(
                     selected_model,
                     selected_classifier,
-                    encoded_input,
+                    model_input,
                 )
                 results_df = pd.DataFrame([result])
 
